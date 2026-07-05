@@ -152,7 +152,8 @@ function onChildExit(child, code, signal) {
 
 function spawnChild(child) {
   const proc = spawn(child.cmd, child.args, {
-    cwd: '/app',
+    // Repo root: /app in the Docker image, the checkout dir when run locally.
+    cwd: require('path').join(__dirname, '..'),
     stdio: ['ignore', 'pipe', 'pipe'],
     env: process.env,
   });
