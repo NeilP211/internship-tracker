@@ -1,6 +1,11 @@
-# internship-tracker (local)
+# internship-tracker
 
-Personal internship tracker, originally built by [cx18121](https://github.com/cx18121/internship-tracker) and deployed on Railway. This fork runs the whole thing locally on a Mac: same Next.js dashboard, same poller, but backed by Homebrew Postgres instead of a hosted database, with no Docker and no paid services.
+**Live: https://neilp211.github.io/internship-tracker/**
+
+Personal internship tracker, originally built by [cx18121](https://github.com/cx18121/internship-tracker) and deployed on Railway. This fork runs it two ways with no paid services:
+
+- **GitHub Pages (the link above)**: self-updating. A GitHub Actions cron polls all sources every 3 hours on GitHub's servers, carries the database between runs as a dump on the `data` branch, and publishes a static build plus JSON snapshots. Marking postings applied/hidden persists in your browser (localStorage).
+- **Locally on a Mac**: the full live app (Next.js dashboard + always-on poller + Homebrew Postgres), instructions below.
 
 It aggregates SWE/ML internship postings from many sources (SimplifyJobs, Greenhouse/Lever/Ashby/Workday/iCIMS/SmartRecruiters/Rippling/Workable ATS boards, YC Work at a Startup, LinkedIn via JobSpy, Handshake), dedupes them across sources, scores each posting against the preferences in `data/scoring-config.json`, and gives you a fast triage UI.
 
@@ -51,8 +56,23 @@ DATABASE_URL=postgresql://localhost:5432/internship_tracker_test npm run test:ci
 
 Note: `npm install` arms a pre-push git hook that runs the full test suite; bypass with `SKIP_TESTS=1 git push` if needed.
 
+## How the GitHub Pages deploy works
+
+`.github/workflows/pages.yml` runs every 3 hours (and on push to main):
+
+1. Restores the Postgres state from the single-commit `data` branch (`db.dump` + runtime sidecar JSONs) into a `postgres:16` service container.
+2. Runs one full poll cycle (`scripts/poll-once.ts`). The 03:23 UTC run also does the daily dead-link revalidation sweep.
+3. Exports the API responses as static JSON (`scripts/export-static.ts` writes `public/data/*.json`).
+4. Force-pushes the refreshed dump back to `data` (kept at one commit so the branch never accretes history).
+5. Builds the static bundle (`scripts/build-static.sh`: `next build` with `output: "export"` and basePath `/internship-tracker`, with `src/app/api/` stashed aside during the build) and deploys it to Pages.
+
+In the static build the UI runs in "static mode" (`src/app/_lib/static-mode.ts`): it fetches the JSON snapshots instead of the API routes, applied/hidden toggles persist to localStorage, and the notification-settings modal is hidden. Handshake never runs in CI (its auth session stays on your machine and out of the public repo); LinkedIn via JobSpy may yield little from datacenter IPs. Both still work in the local full app.
+
+To enable Discord alerts from the cron, add `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_INTERNSHIPS` as repo secrets.
+
 ## How it differs from the original deployment
 
 - `scripts/supervisor.cjs` resolves the repo root instead of the Docker path `/app`, so `npm run serve` works outside the container.
 - `scripts/setup-local.sh` replaces the Dockerfile + Railway volume + manual `psql` migration flow.
-- `railway.json`, `Dockerfile`, and `docker-entrypoint.sh` are kept but unused locally.
+- The GitHub Pages pipeline above replaces the Railway always-on deployment.
+- `railway.json`, `Dockerfile`, and `docker-entrypoint.sh` are kept but unused.

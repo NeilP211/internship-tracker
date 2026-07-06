@@ -24,8 +24,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = '/app/data';
-const DEFAULTS_DIR = '/app/data-defaults';
+// Docker paths by default; the GitHub Pages workflow overrides these to
+// reconcile the repo's data/ (as "defaults") against the sidecars carried on
+// the data branch (as the "volume"). Same three-category semantics either way.
+const DATA_DIR = process.env.SEED_DATA_DIR || '/app/data';
+const DEFAULTS_DIR = process.env.SEED_DEFAULTS_DIR || '/app/data-defaults';
 
 const MERGE_FILES = {
   // Map of filename → merge strategy.

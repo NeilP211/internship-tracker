@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { OWNER_TOKEN_LS_KEY } from "../_lib/ownerHeader";
+import { STATIC_MODE } from "../_lib/static-mode";
 
 // Owner gate. The site is shared read-only with friends; the owner sets
 // `localStorage.ownerToken = "<matching OWNER_TOKEN env value>"` once per
@@ -13,11 +14,16 @@ import { OWNER_TOKEN_LS_KEY } from "../_lib/ownerHeader";
 // no UI advantage either.
 
 export function useIsOwner(): boolean {
-  // Default false on first paint so non-owner visitors never flash
-  // owner-only UI before hydration.
-  const [isOwner, setIsOwner] = useState(false);
+  // Static (Pages) mode has no server to verify a token against; every
+  // mutation is a localStorage overlay, so the visitor is always "owner".
+  // Constant at build time, so there is no hydration mismatch.
+  //
+  // Default false on first paint otherwise so non-owner visitors never
+  // flash owner-only UI before hydration.
+  const [isOwner, setIsOwner] = useState(STATIC_MODE);
 
   useEffect(() => {
+    if (STATIC_MODE) return;
     try {
       setIsOwner(!!window.localStorage.getItem(OWNER_TOKEN_LS_KEY));
     } catch {

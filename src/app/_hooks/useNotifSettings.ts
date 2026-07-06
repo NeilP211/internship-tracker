@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { isRoleId, type RoleId } from "@/lib/role-taxonomy";
 import type { TierFilter } from "../_lib/types";
 import { ownerHeader } from "../_lib/ownerHeader";
+import { STATIC_MODE } from "../_lib/static-mode";
 
 // All notification-settings state in one place. Previously NotifModal's
 // 19 props each had their own useState declaration in page.tsx; the load
@@ -83,6 +84,9 @@ export function useNotifSettings(): UseNotifSettings {
   // useState default, so a server with a partial settings file doesn't
   // overwrite freshly-loaded local state with `undefined`.
   useEffect(() => {
+    // Static (Pages) mode has no settings route; the modal is hidden there
+    // and the defaults above are never read.
+    if (STATIC_MODE) return;
     fetch("/api/internships/settings", { headers: ownerHeader() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Activity, AlertTriangle } from "lucide-react";
 import { SOURCE_BADGE, SOURCE_BADGE_FALLBACK } from "../_lib/constants";
 import { timeAgo } from "../_lib/format";
+import { STATIC_MODE, staticDataUrl } from "../_lib/static-mode";
 
 interface SourceEntry {
   name: string;
@@ -35,7 +36,7 @@ export function StatusPill({ lastPolledAt, totalPostings, sourcesTotal, exclusio
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/internships/source-health")
+    fetch(STATIC_MODE ? staticDataUrl("source-health") : "/api/internships/source-health")
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { sources: SourceEntry[] } | null) => d && setHealth(d.sources))
       .catch(() => {});

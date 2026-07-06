@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { ownerHeader } from "../_lib/ownerHeader";
+import { STATIC_MODE, writeOverride, type RowOverride } from "../_lib/static-mode";
 
 /**
  * Per-row optimistic PATCH against /api/internships/:id with rollback on
@@ -38,6 +39,16 @@ export function useOptimisticPatch(): {
   const patch = useCallback(
     async (id: string, body: object, apply: () => void, revert: () => void): Promise<void> => {
       if (pendingRef.current.has(id)) return;
+
+      // Static (Pages) mode: no server to PATCH. Persist the change to the
+      // localStorage overlay and apply locally; it cannot fail, so there is
+      // no pending state and no rollback.
+      if (STATIC_MODE) {
+        writeOverride(id, body as RowOverride);
+        apply();
+        return;
+      }
+
       setPending(id, true);
       apply();
 

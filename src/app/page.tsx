@@ -58,6 +58,7 @@ import { useNotifSettings } from "./_hooks/useNotifSettings";
 import { useDebouncedValue } from "./_hooks/useDebouncedValue";
 import { useIsOwner } from "./_hooks/useIsOwner";
 import { ownerHeader } from "./_lib/ownerHeader";
+import { STATIC_MODE, staticDataUrl, applyOverrides } from "./_lib/static-mode";
 
 export default function InternshipsPage() {
   const isOwner = useIsOwner();
@@ -251,9 +252,11 @@ export default function InternshipsPage() {
       // pointless query bit. Owner header is sent unconditionally — server
       // verifies it — so a friend who forges localStorage.ownerToken still gets
       // hidden-stripped data.
+      // Static (Pages) mode reads the exported snapshot instead; hidden rows
+      // ship in it and the localStorage overlay re-applies applied/hidden.
       const listRes = await fetch(
-        `/api/internships${isOwner ? "?includeHidden=1" : ""}`,
-        { signal, headers: ownerHeader() },
+        STATIC_MODE ? staticDataUrl("internships") : `/api/internships${isOwner ? "?includeHidden=1" : ""}`,
+        STATIC_MODE ? { signal, cache: "no-cache" } : { signal, headers: ownerHeader() },
       );
 
       if (listRes.status === 503) {
@@ -262,7 +265,10 @@ export default function InternshipsPage() {
       }
       setOffline(false);
 
-      if (listRes.ok) setInternships(await listRes.json());
+      if (listRes.ok) {
+        const rows = await listRes.json();
+        setInternships(STATIC_MODE ? applyOverrides(rows) : rows);
+      }
     } catch (err) {
       // AbortError = a newer fetch superseded this one; leave UI alone so
       // the in-flight request's setInternships doesn't get stomped by a
@@ -298,8 +304,8 @@ export default function InternshipsPage() {
   const fetchStatsAndSources = useCallback(async () => {
     try {
       const [statsRes, sourcesRes] = await Promise.all([
-        fetch("/api/internships/stats"),
-        fetch("/api/internships/sources"),
+        fetch(STATIC_MODE ? staticDataUrl("stats") : "/api/internships/stats"),
+        fetch(STATIC_MODE ? staticDataUrl("sources") : "/api/internships/sources"),
       ]);
       if (statsRes.ok) setStats(await statsRes.json());
       if (sourcesRes.ok) setSources(await sourcesRes.json());
@@ -665,7 +671,7 @@ export default function InternshipsPage() {
                 <Layers className="h-3.5 w-3.5" />
               </button>
             )}
-            {isOwner && (
+            {isOwner && !STATIC_MODE && (
               <Button
                 variant="outline"
                 size="sm"
@@ -699,8 +705,14 @@ export default function InternshipsPage() {
             <div>
               <p className="font-medium text-white/70">Agent offline</p>
               <p className="text-sm text-white/40">
-                Internship tracker is not running yet. Start it at{" "}
-                <code className="text-xs bg-white/10 px-1 rounded">localhost:3001</code>.
+                {STATIC_MODE ? (
+                  <>Could not load the data snapshot. Check the latest Actions run.</>
+                ) : (
+                  <>
+                    Internship tracker is not running yet. Start it at{" "}
+                    <code className="text-xs bg-white/10 px-1 rounded">localhost:3001</code>.
+                  </>
+                )}
               </p>
             </div>
           </div>

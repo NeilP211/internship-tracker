@@ -1,0 +1,146 @@
+# Self-updating GitHub Pages deploy (the Xonos pattern): a cron poll runs on
+# GitHub's servers against a throwaway Postgres service container, with the
+# durable state (a pg_dump plus the runtime sidecar JSONs) carried between
+# runs on the orphan `data` branch. Each run restores that state, polls all
+# sources once, exports the JSON snapshots the static UI reads, saves state
+# back, and deploys the static bundle to Pages.
+#
+# The `data` branch is kept at exactly one commit (orphan + force push) so a
+# ~1 MB database dump every 3 hours does not accrete gigabytes of history.
+name: pages
+
+on:
+  schedule:
+    - cron: '23 0,3,6,9,12,15,18,21 * * *'
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  poll-and-publish:
+    runs-on: ubuntu-latest
+    # Must exceed the worst case poll-once.ts is designed to survive: setup
+    # (~8 min cold) + 25 min cycle watchdog + 30 + 30 min revalidation
+    # watchdogs + export/build/deploy (~10 min). A killed job skips the
+    # state-save and deploy steps, which re-sends any Discord alerts from the
+    # discarded cycle on the next run.
+    timeout-minutes: 115
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tracker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tracker
+      # Optional Discord alerts from the cron itself. Unset secrets resolve to
+      # empty strings, which the notifier treats as unconfigured and skips.
+      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      DISCORD_CHANNEL_INTERNSHIPS: ${{ secrets.DISCORD_CHANNEL_INTERNSHIPS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: .data-branch
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Restore database from data branch
+        run: |
+          if [ -f .data-branch/db.dump ]; then
+            pg_restore --no-owner --no-privileges -d "$DATABASE_URL" .data-branch/db.dump
+          else
+            for f in migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+          fi
+          echo "rows: $(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM internships')"
+
+      - name: Restore runtime sidecars
+        run: |
+          # Reconcile with the same script (and semantics) the old Docker
+          # deploy used at boot: repo data/ acts as the image defaults, the
+          # carried sidecars act as the volume. ats-targets.json gets
+          # union-merged with repo entries winning collisions (so repo edits
+          # ship), pure config is overwritten from the repo, and everything
+          # else keeps the carried runtime state.
+          if [ -d .data-branch/sidecars ]; then
+            cp -R data .repo-data-defaults
+            cp .data-branch/sidecars/*.json data/ 2>/dev/null || true
+            SEED_DATA_DIR=data SEED_DEFAULTS_DIR=.repo-data-defaults node scripts/seed-config.cjs
+          fi
+
+      - name: Cache Playwright Firefox
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-firefox-${{ hashFiles('package-lock.json') }}
+
+      - run: npx playwright install --with-deps firefox
+
+      - name: Python venv for JobSpy
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet python-jobspy
+
+      - name: Poll all sources once
+        run: |
+          # The 03:23 UTC run also does the daily link-revalidation sweep.
+          if [ "$(date -u +%H)" = "03" ]; then export REVALIDATE=1; fi
+          npx tsx scripts/poll-once.ts
+
+      - name: Export static JSON snapshots
+        run: npx tsx scripts/export-static.ts
+
+      - name: Save state back to data branch
+        run: |
+          pg_dump -Fc --no-owner "$DATABASE_URL" > .data-branch/db.dump
+          mkdir -p .data-branch/sidecars
+          # The data branch is public. Never carry files that can hold
+          # personal contact info or session cookies (they should not exist
+          # in CI at all; this is defense in depth).
+          for f in data/*.json; do
+            [ -e "$f" ] || continue
+            case "$(basename "$f")" in
+              notif-settings.json|handshake-auth.json) continue ;;
+            esac
+            cp "$f" .data-branch/sidecars/
+          done
+          cd .data-branch
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git checkout --orphan data-next
+          git add -A
+          git commit -m "data snapshot $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push --force origin data-next:data
+
+      - name: Build static site
+        run: bash scripts/build-static.sh
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+      - uses: actions/deploy-pages@v4
