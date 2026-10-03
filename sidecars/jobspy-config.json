@@ -1,0 +1,36 @@
+{
+  "sites": ["linkedin"],
+  "searches": [
+    {
+      "keywords": "software engineer intern",
+      "location": "United States",
+      "results_wanted": 75,
+      "hours_old": 72
+    },
+    {
+      "keywords": "machine learning intern",
+      "location": "United States",
+      "results_wanted": 50,
+      "hours_old": 72
+    },
+    {
+      "keywords": "data scientist intern",
+      "location": "United States",
+      "results_wanted": 40,
+      "hours_old": 72
+    },
+    {
+      "keywords": "full stack developer intern",
+      "location": "United States",
+      "results_wanted": 40,
+      "hours_old": 72
+    },
+    {
+      "keywords": "software engineering internship",
+      "location": "United States",
+      "results_wanted": 50,
+      "hours_old": 72,
+      "remote": true
+    }
+  ]
+}
