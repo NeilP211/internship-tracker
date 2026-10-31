@@ -1,0 +1,35 @@
+{
+  "polledAt": "2026-10-31T19:25:07.309Z",
+  "sourceCounts": {
+    "SimplifyJobs": 5193,
+    "YC WaaS": 22,
+    "Linkedin": 145,
+    "Greenhouse": 1480,
+    "Ashby": 713,
+    "Lever": 502,
+    "Workday": 1280,
+    "SmartRecruiters": 281,
+    "Rippling": 21,
+    "Workable": 26
+  },
+  "netNewBySource": {
+    "SimplifyJobs": 1,
+    "YC WaaS": 1,
+    "Linkedin": 2,
+    "Greenhouse": 2,
+    "Ashby": 2,
+    "Lever": 3,
+    "Workday": 2,
+    "SmartRecruiters": 1,
+    "Rippling": 1,
+    "Workable": 1
+  },
+  "exclusionCounts": {
+    "non-us": 2472,
+    "phd-required": 259,
+    "closed": 0,
+    "non-swe": 2680,
+    "not-intern": 162,
+    "expired-season": 12
+  }
+}
